@@ -6,7 +6,7 @@ use App\Models\User;
 use App\Models\PasswordResetCode;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 
 class PasswordResetController extends Controller
 {
@@ -26,20 +26,10 @@ class PasswordResetController extends Controller
             'expires_at' => now()->addMinutes(10),
         ]);
 
-        $response = Http::withToken(env('RESEND_API_KEY'))
-            ->post('https://api.resend.com/emails', [
-                'from' => 'ReBite <onboarding@resend.dev>',
-                'to' => [$request->email],
-                'subject' => 'ReBite Password Reset Code',
-                'text' => 'Your ReBite password reset code is: ' . $code,
-            ]);
-
-        if (!$response->successful()) {
-            return response()->json([
-                'message' => 'Failed to send reset code email',
-                'error' => $response->json(),
-            ], 500);
-        }
+        Mail::raw("Your ReBite password reset code is: " . $code, function ($message) use ($request) {
+            $message->to($request->email)
+                ->subject("ReBite Password Reset Code");
+        });
 
         return response()->json([
             'message' => 'Reset code sent to your email successfully'
