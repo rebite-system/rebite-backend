@@ -8,50 +8,65 @@ use Carbon\Carbon;
 class FoodAiPriorityService
 {
     public function analyze($food)
-{
-    return $this->ruleBasedPriority($food);
-}
-   /* public function analyze($food)
     {
         $apiKey = env('OPENROUTER_API_KEY');
 
-        $ruleBased = $this->ruleBasedPriority($food);
-
         if (!$apiKey) {
-            return $ruleBased;
+            return $this->fallback();
         }
 
-        $now = Carbon::now();
-        $expiry = $food->expiry ? Carbon::parse($food->expiry) : null;
-        $hoursLeft = $expiry ? $now->diffInHours($expiry, false) : null;
+        $now = Carbon::now('Africa/Cairo');
+
+        $pickupFrom = $food->pickup_from
+            ? Carbon::parse($now->toDateString() . ' ' . $food->pickup_from, 'Africa/Cairo')
+            : null;
+
+        $pickupUntil = $food->pickup_until
+            ? Carbon::parse($now->toDateString() . ' ' . $food->pickup_until, 'Africa/Cairo')
+            : null;
+
+        if ($pickupFrom && $pickupUntil && $pickupUntil->lessThan($pickupFrom)) {
+            $pickupUntil->addDay();
+        }
+
+        $hoursLeft = $pickupUntil
+            ? round($now->diffInMinutes($pickupUntil, false) / 60, 1)
+            : null;
 
         $prompt = "
 You are an AI priority engine for ReBite.
 
-Classify food priority using ONLY:
-1. Quantity
-2. Remaining time before expiry
+Your task is to classify food donation priority.
 
-Do NOT use notes.
-Do NOT use food type.
+The MOST IMPORTANT factor is the remaining time until pickup deadline.
 
 Current time: {$now}
-Expiry date/time: {$food->expiry}
-Hours left before expiry: {$hoursLeft}
+Pickup from: {$food->pickup_from}
+Pickup until: {$food->pickup_until}
+Hours remaining: {$hoursLeft}
+
 Quantity: {$food->quantity}
 
-Rules:
-- High: quantity > 50 OR hours left <= 2 OR already expired.
-- Medium: quantity between 20 and 50 OR hours left between 2 and 6.
-- Low: quantity < 20 AND hours left > 6.
+Priority rules:
 
-Expiry urgency is more important than quantity.
+HIGH:
+- Less than 3 hours remaining.
 
-Return ONLY valid JSON:
+MEDIUM:
+- Between 4 and 10 hours remaining.
+
+LOW:
+- More than 10 hours remaining.
+
+Ignore food type.
+Ignore notes.
+
+Return ONLY valid JSON.
+
 {
   \"ai_priority_level\": \"High or Medium or Low\",
   \"ai_priority_score\": 0-100,
-  \"ai_priority_reason\": \"short reason based on quantity and time\",
+  \"ai_priority_reason\": \"short explanation\",
   \"ai_recommended_action\": \"short action\"
 }
 ";
@@ -78,7 +93,7 @@ Return ONLY valid JSON:
             $text = $response->json("choices.0.message.content");
 
             if (!$text) {
-                return $ruleBased;
+                return $this->fallback();
             }
 
             $text = trim($text);
@@ -87,61 +102,27 @@ Return ONLY valid JSON:
             $data = json_decode($text, true);
 
             if (!$data) {
-                return $ruleBased;
+                return $this->fallback();
             }
 
             return [
-                "ai_priority_level" => $data["ai_priority_level"] ?? $ruleBased["ai_priority_level"],
-                "ai_priority_score" => $data["ai_priority_score"] ?? $ruleBased["ai_priority_score"],
-                "ai_priority_reason" => $data["ai_priority_reason"] ?? $ruleBased["ai_priority_reason"],
-                "ai_recommended_action" => $data["ai_recommended_action"] ?? $ruleBased["ai_recommended_action"],
+                "ai_priority_level" => $data["ai_priority_level"] ?? "Low",
+                "ai_priority_score" => $data["ai_priority_score"] ?? 0,
+                "ai_priority_reason" => $data["ai_priority_reason"] ?? "AI analysis completed",
+                "ai_recommended_action" => $data["ai_recommended_action"] ?? "Normal monitoring",
             ];
         } catch (\Exception $e) {
-            return $ruleBased;
+            return $this->fallback();
         }
-    }*/
-
-  private function ruleBasedPriority($food)
-{
-    $now = Carbon::now();
-
-    $pickupFrom = $food->pickup_from
-        ? Carbon::parse($now->toDateString() . ' ' . $food->pickup_from)
-        : null;
-
-    $pickupUntil = $food->pickup_until
-        ? Carbon::parse($now->toDateString() . ' ' . $food->pickup_until)
-        : null;
-
-    if ($pickupFrom && $pickupUntil && $pickupUntil->lessThan($pickupFrom)) {
-        $pickupUntil->addDay();
     }
 
-    $hoursLeft = $pickupUntil ? $now->diffInHours($pickupUntil, false) : null;
-
-    if ($hoursLeft !== null && $hoursLeft <= 3) {
+    private function fallback()
+    {
         return [
-            "ai_priority_level" => "High",
-            "ai_priority_score" => 90,
-            "ai_priority_reason" => "Less than 3 hours remaining until pickup deadline.",
-            "ai_recommended_action" => "Prioritize immediate pickup.",
+            "ai_priority_level" => "Low",
+            "ai_priority_score" => 0,
+            "ai_priority_reason" => "AI unavailable",
+            "ai_recommended_action" => "Normal monitoring",
         ];
     }
-
-    if ($hoursLeft !== null && $hoursLeft <= 10) {
-        return [
-            "ai_priority_level" => "Medium",
-            "ai_priority_score" => 60,
-            "ai_priority_reason" => "Between 4 and 10 hours remaining until pickup deadline.",
-            "ai_recommended_action" => "Arrange pickup soon.",
-        ];
-    }
-
-    return [
-        "ai_priority_level" => "Low",
-        "ai_priority_score" => 25,
-        "ai_priority_reason" => "More than 10 hours remaining until pickup deadline.",
-        "ai_recommended_action" => "Normal monitoring.",
-    ];
-}
 }
