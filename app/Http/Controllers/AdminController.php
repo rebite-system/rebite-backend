@@ -491,56 +491,53 @@ public function updateNotifications(Request $request)
             ]);
         }
 
-        $foodQuery = Food::whereBetween('created_at', [$from, $to]);
+      $foodQuery = Food::whereBetween('created_at', [$from, $to]);
+$donationQuery = Donation::whereBetween('created_at', [$from, $to]);
 
-        $donationQuery = Donation::whereBetween('created_at', [$from, $to]);
+$savedPortions = (clone $foodQuery)->sum('quantity');
+$foodListings = (clone $foodQuery)->count();
+$totalDonations = (clone $donationQuery)->count();
+$platformFees = (clone $donationQuery)->sum('platform_fee');
 
-        $savedPortions = (clone $foodQuery)->sum('quantity');
-
-        return response()->json([
-            'data' => [
-                'stats' => [
-                    [
-                        'label' => 'Saved Portions',
-                        'value' => $savedPortions,
-                    ],
-                    [
-                        'label' => 'Platform Fees',
-                        'value' => number_format((clone $donationQuery)->sum('platform_fee')) . ' EGP',
-                    ],
-                    [
-                        'label' => 'Supported Areas',
-                        'value' => count(
-                            Cache::get(
-                                'admin_supported_locations',
-                                $this->defaultLocations()
-                            )
-                        ),
-                    ],
-                    [
-                        'label' => 'Estimated CO₂ Saved',
-                        'value' => number_format($savedPortions * 0.5, 1) . ' kg',
-                    ],
-                ],
-
-                'summary' => [
-                    [
-                        'label' => 'Collected',
-                        'value' => $savedPortions,
-                        'color' => '#27ae60',
-                    ],
-                    [
-                        'label' => 'Food Listings',
-                        'value' => (clone $foodQuery)->count(),
-                        'color' => '#f39c12',
-                    ],
-                    [
-                        'label' => 'Donations',
-                        'value' => (clone $donationQuery)->count(),
-                        'color' => '#2980b9',
-                    ],
-                ],
+return response()->json([
+    'data' => [
+        'stats' => [
+            [
+                'label' => 'Saved Portions',
+                'value' => $savedPortions,
             ],
-        ]);
+            [
+                'label' => 'Platform Fees',
+                'value' => number_format($platformFees) . ' EGP',
+            ],
+            [
+                'label' => 'Total Donations',
+                'value' => $totalDonations,
+            ],
+            [
+                'label' => 'Estimated CO₂ Saved',
+                'value' => number_format($savedPortions * 0.5, 1) . ' kg',
+            ],
+        ],
+
+        'summary' => [
+            [
+                'label' => 'Saved Portions',
+                'value' => $savedPortions,
+                'color' => '#27ae60',
+            ],
+            [
+                'label' => 'Food Listings',
+                'value' => $foodListings,
+                'color' => '#f39c12',
+            ],
+            [
+                'label' => 'Donations',
+                'value' => $totalDonations,
+                'color' => '#2980b9',
+            ],
+        ],
+    ],
+]);
     }
 }
