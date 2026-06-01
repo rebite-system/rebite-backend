@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
-
+use Carbon\Carbon;
 
 class FoodAiPriorityService
 {
@@ -11,53 +11,52 @@ class FoodAiPriorityService
     {
         $apiKey = env('OPENROUTER_API_KEY');
 
+        $ruleBased = $this->ruleBasedPriority($food);
+
         if (!$apiKey) {
-            return $this->fallback();
+            return $ruleBased;
         }
 
-       $prompt = "
-You are an AI priority engine for ReBite, a same-day surplus food donation platform.
+        $now = Carbon::now();
+        $expiry = $food->expiry ? Carbon::parse($food->expiry) : null;
+        $hoursLeft = $expiry ? $now->diffInHours($expiry, false) : null;
 
-Important rule:
-All food listings are same-day pickup listings, so do NOT mark everything as High only because the expiry date is today.
+        $prompt = "
+You are an AI priority engine for ReBite.
 
-Analyze the food listing and classify priority mainly using quantity, pickup urgency, and food type.
+Classify food priority using ONLY:
+1. Quantity
+2. Remaining time before expiry
 
-Priority rules:
-- High: quantity is 100 portions or more, OR notes mention urgent/immediate/spoiled/risk, OR pickup window is very short.
-- Medium: quantity is between 30 and 99 portions, OR cooked meals with normal pickup conditions.
-- Low: quantity is less than 30 portions and no urgent notes.
+Do NOT use notes.
+Do NOT use food type.
 
-Food:
-Title: {$food->title}
-Category: {$food->category}
+Current time: {$now}
+Expiry date/time: {$food->expiry}
+Hours left before expiry: {$hoursLeft}
 Quantity: {$food->quantity}
-Expiry date: {$food->expiry}
-Pickup from: {$food->pickup_from}
-Pickup until: {$food->pickup_until}
-Notes: {$food->notes}
 
-Return ONLY valid JSON. No markdown. No explanation.
+Rules:
+- High: quantity > 50 OR hours left <= 2 OR already expired.
+- Medium: quantity between 20 and 50 OR hours left between 2 and 6.
+- Low: quantity < 20 AND hours left > 6.
 
-Return exactly:
+Expiry urgency is more important than quantity.
+
+Return ONLY valid JSON:
 {
   \"ai_priority_level\": \"High or Medium or Low\",
   \"ai_priority_score\": 0-100,
-  \"ai_priority_reason\": \"short reason\",
+  \"ai_priority_reason\": \"short reason based on quantity and time\",
   \"ai_recommended_action\": \"short action\"
 }
-
-Expected scoring:
-High = 80 to 100
-Medium = 45 to 79
-Low = 0 to 44
 ";
 
         try {
             $response = Http::withHeaders([
                 "Authorization" => "Bearer " . $apiKey,
                 "Content-Type" => "application/json",
-                "HTTP-Referer" => "http://localhost:5173",
+                "HTTP-Referer" => "https://rebite-frontend.vercel.app",
                 "X-Title" => "ReBite",
             ])->timeout(30)->post(
                 "https://openrouter.ai/api/v1/chat/completions",
@@ -75,7 +74,7 @@ Low = 0 to 44
             $text = $response->json("choices.0.message.content");
 
             if (!$text) {
-                return $this->fallback();
+                return $ruleBased;
             }
 
             $text = trim($text);
@@ -84,26 +83,62 @@ Low = 0 to 44
             $data = json_decode($text, true);
 
             if (!$data) {
-                return $this->fallback();
+                return $ruleBased;
             }
 
             return [
-                "ai_priority_level" => $data["ai_priority_level"] ?? "Low",
-                "ai_priority_score" => $data["ai_priority_score"] ?? 0,
-                "ai_priority_reason" => $data["ai_priority_reason"] ?? "AI analysis completed",
-                "ai_recommended_action" => $data["ai_recommended_action"] ?? "Normal monitoring",
+                "ai_priority_level" => $data["ai_priority_level"] ?? $ruleBased["ai_priority_level"],
+                "ai_priority_score" => $data["ai_priority_score"] ?? $ruleBased["ai_priority_score"],
+                "ai_priority_reason" => $data["ai_priority_reason"] ?? $ruleBased["ai_priority_reason"],
+                "ai_recommended_action" => $data["ai_recommended_action"] ?? $ruleBased["ai_recommended_action"],
             ];
         } catch (\Exception $e) {
-            return $this->fallback();
+            return $ruleBased;
         }
     }
-    private function fallback()
+
+    private function ruleBasedPriority($food)
     {
+        $quantity = (int) ($food->quantity ?? 0);
+
+        $expiry = $food->expiry ? Carbon::parse($food->expiry) : null;
+        $hoursLeft = $expiry ? Carbon::now()->diffInHours($expiry, false) : null;
+
+        if ($hoursLeft !== null && $hoursLeft <= 2) {
+            return [
+                "ai_priority_level" => "High",
+                "ai_priority_score" => 90,
+                "ai_priority_reason" => "Expiry time is very close or already passed.",
+                "ai_recommended_action" => "Prioritize immediate pickup.",
+            ];
+        }
+
+        if ($quantity > 50) {
+            return [
+                "ai_priority_level" => "High",
+                "ai_priority_score" => 85,
+                "ai_priority_reason" => "Large quantity creates high waste risk.",
+                "ai_recommended_action" => "Notify charities immediately.",
+            ];
+        }
+
+        if (
+            ($quantity >= 20 && $quantity <= 50) ||
+            ($hoursLeft !== null && $hoursLeft > 2 && $hoursLeft <= 6)
+        ) {
+            return [
+                "ai_priority_level" => "Medium",
+                "ai_priority_score" => 60,
+                "ai_priority_reason" => "Moderate quantity or limited time remaining.",
+                "ai_recommended_action" => "Monitor and arrange pickup soon.",
+            ];
+        }
+
         return [
             "ai_priority_level" => "Low",
-            "ai_priority_score" => 0,
-            "ai_priority_reason" => "AI unavailable",
-            "ai_recommended_action" => "Normal monitoring",
+            "ai_priority_score" => 25,
+            "ai_priority_reason" => "Low quantity and enough time before expiry.",
+            "ai_recommended_action" => "Normal monitoring.",
         ];
     }
 }
