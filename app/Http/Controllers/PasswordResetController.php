@@ -26,10 +26,10 @@ class PasswordResetController extends Controller
             'expires_at' => now()->addMinutes(10),
         ]);
 
-        Mail::raw("Your ReBite password reset code is: " . $code, function ($message) use ($request) {
-            $message->to($request->email)
-                ->subject("ReBite Password Reset Code");
-        });
+       Mail::raw("Your ReBite password reset code is: " . $code, function ($message) use ($request) {
+    $message->to($request->email)
+        ->subject("ReBite Password Reset Code");
+})->queue();
 
         return response()->json([
             'message' => 'Reset code sent to your email successfully'
