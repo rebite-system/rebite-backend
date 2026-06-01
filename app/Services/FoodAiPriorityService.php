@@ -98,47 +98,60 @@ Return ONLY valid JSON:
     }
 
     private function ruleBasedPriority($food)
-    {
-        $quantity = (int) ($food->quantity ?? 0);
+{
+    $quantity = (int) ($food->quantity ?? 0);
 
-        $expiry = $food->expiry ? Carbon::parse($food->expiry) : null;
-        $hoursLeft = $expiry ? Carbon::now()->diffInHours($expiry, false) : null;
+    $now = Carbon::now();
 
-        if ($hoursLeft !== null && $hoursLeft <= 2) {
-            return [
-                "ai_priority_level" => "High",
-                "ai_priority_score" => 90,
-                "ai_priority_reason" => "Expiry time is very close or already passed.",
-                "ai_recommended_action" => "Prioritize immediate pickup.",
-            ];
-        }
+    $pickupFrom = $food->pickup_from
+        ? Carbon::parse($now->toDateString() . ' ' . $food->pickup_from)
+        : null;
 
-        if ($quantity > 50) {
-            return [
-                "ai_priority_level" => "High",
-                "ai_priority_score" => 85,
-                "ai_priority_reason" => "Large quantity creates high waste risk.",
-                "ai_recommended_action" => "Notify charities immediately.",
-            ];
-        }
+    $pickupUntil = $food->pickup_until
+        ? Carbon::parse($now->toDateString() . ' ' . $food->pickup_until)
+        : null;
 
-        if (
-            ($quantity >= 20 && $quantity <= 50) ||
-            ($hoursLeft !== null && $hoursLeft > 2 && $hoursLeft <= 6)
-        ) {
-            return [
-                "ai_priority_level" => "Medium",
-                "ai_priority_score" => 60,
-                "ai_priority_reason" => "Moderate quantity or limited time remaining.",
-                "ai_recommended_action" => "Monitor and arrange pickup soon.",
-            ];
-        }
+    if ($pickupFrom && $pickupUntil && $pickupUntil->lessThan($pickupFrom)) {
+        $pickupUntil->addDay();
+    }
 
+    $hoursLeft = $pickupUntil ? $now->diffInHours($pickupUntil, false) : null;
+
+    if ($hoursLeft !== null && $hoursLeft <= 2) {
         return [
-            "ai_priority_level" => "Low",
-            "ai_priority_score" => 25,
-            "ai_priority_reason" => "Low quantity and enough time before expiry.",
-            "ai_recommended_action" => "Normal monitoring.",
+            "ai_priority_level" => "High",
+            "ai_priority_score" => 90,
+            "ai_priority_reason" => "Less than 2 hours remaining until pickup deadline.",
+            "ai_recommended_action" => "Prioritize immediate pickup.",
         ];
     }
+
+    if ($quantity > 50) {
+        return [
+            "ai_priority_level" => "High",
+            "ai_priority_score" => 85,
+            "ai_priority_reason" => "Large quantity creates high waste risk.",
+            "ai_recommended_action" => "Notify charities immediately.",
+        ];
+    }
+
+    if (
+        ($quantity >= 20 && $quantity <= 50) ||
+        ($hoursLeft !== null && $hoursLeft > 2 && $hoursLeft <= 6)
+    ) {
+        return [
+            "ai_priority_level" => "Medium",
+            "ai_priority_score" => 60,
+            "ai_priority_reason" => "Moderate quantity or limited time remaining.",
+            "ai_recommended_action" => "Arrange pickup soon.",
+        ];
+    }
+
+    return [
+        "ai_priority_level" => "Low",
+        "ai_priority_score" => 25,
+        "ai_priority_reason" => "Low quantity and enough time before pickup deadline.",
+        "ai_recommended_action" => "Normal monitoring.",
+    ];
+}
 }
