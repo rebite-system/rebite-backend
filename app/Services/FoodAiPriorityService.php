@@ -8,6 +8,10 @@ use Carbon\Carbon;
 class FoodAiPriorityService
 {
     public function analyze($food)
+{
+    return $this->ruleBasedPriority($food);
+}
+   /* public function analyze($food)
     {
         $apiKey = env('OPENROUTER_API_KEY');
 
@@ -95,7 +99,7 @@ Return ONLY valid JSON:
         } catch (\Exception $e) {
             return $ruleBased;
         }
-    }
+    }*/
 
     private function ruleBasedPriority($food)
 {
