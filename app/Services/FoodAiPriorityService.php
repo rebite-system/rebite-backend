@@ -101,10 +101,8 @@ Return ONLY valid JSON:
         }
     }*/
 
-    private function ruleBasedPriority($food)
+  private function ruleBasedPriority($food)
 {
-    $quantity = (int) ($food->quantity ?? 0);
-
     $now = Carbon::now();
 
     $pickupFrom = $food->pickup_from
@@ -121,32 +119,20 @@ Return ONLY valid JSON:
 
     $hoursLeft = $pickupUntil ? $now->diffInHours($pickupUntil, false) : null;
 
-    if ($hoursLeft !== null && $hoursLeft <= 2) {
+    if ($hoursLeft !== null && $hoursLeft <= 3) {
         return [
             "ai_priority_level" => "High",
             "ai_priority_score" => 90,
-            "ai_priority_reason" => "Less than 2 hours remaining until pickup deadline.",
+            "ai_priority_reason" => "Less than 3 hours remaining until pickup deadline.",
             "ai_recommended_action" => "Prioritize immediate pickup.",
         ];
     }
 
-    if ($quantity > 50) {
-        return [
-            "ai_priority_level" => "High",
-            "ai_priority_score" => 85,
-            "ai_priority_reason" => "Large quantity creates high waste risk.",
-            "ai_recommended_action" => "Notify charities immediately.",
-        ];
-    }
-
-    if (
-        ($quantity >= 20 && $quantity <= 50) ||
-        ($hoursLeft !== null && $hoursLeft > 2 && $hoursLeft <= 6)
-    ) {
+    if ($hoursLeft !== null && $hoursLeft <= 10) {
         return [
             "ai_priority_level" => "Medium",
             "ai_priority_score" => 60,
-            "ai_priority_reason" => "Moderate quantity or limited time remaining.",
+            "ai_priority_reason" => "Between 4 and 10 hours remaining until pickup deadline.",
             "ai_recommended_action" => "Arrange pickup soon.",
         ];
     }
@@ -154,7 +140,7 @@ Return ONLY valid JSON:
     return [
         "ai_priority_level" => "Low",
         "ai_priority_score" => 25,
-        "ai_priority_reason" => "Low quantity and enough time before pickup deadline.",
+        "ai_priority_reason" => "More than 10 hours remaining until pickup deadline.",
         "ai_recommended_action" => "Normal monitoring.",
     ];
 }
