@@ -83,7 +83,6 @@ $food->save();
             ->paginate(10);
     } else {
         $foods = Food::with('restaurant')
-            ->where('status', 'active')
             ->orderByDesc('ai_priority_score')
             ->latest()
             ->paginate(10);
