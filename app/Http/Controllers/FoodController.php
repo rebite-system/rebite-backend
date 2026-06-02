@@ -6,10 +6,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Models\Food;
 use App\Services\FoodAiPriorityService;
+use App\Jobs\AnalyzeFoodPriorityJob;
 
 class FoodController extends Controller
 {
-    public function store(Request $r, FoodAiPriorityService $aiService)
+    public function store(Request $r)
     {
         $data = $r->validate([
 
@@ -57,13 +58,7 @@ class FoodController extends Controller
             'restaurant_id' => auth()->id(),
             'image' => $imagePath,
         ]);
-        $ai = $aiService->analyze($food);
-
-$food->ai_priority_level = $ai["ai_priority_level"];
-$food->ai_priority_score = $ai["ai_priority_score"];
-$food->ai_priority_reason = $ai["ai_priority_reason"];
-$food->ai_recommended_action = $ai["ai_recommended_action"];
-$food->save();
+      AnalyzeFoodPriorityJob::dispatch($food->id);
 
         return response()->json([
             'message' => 'Food listing created successfully',
