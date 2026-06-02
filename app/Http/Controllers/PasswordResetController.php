@@ -60,42 +60,28 @@ class PasswordResetController extends Controller
     }
 
     public function resetPassword(Request $request)
-    {
-        $request->validate([
-            'email' => 'required|email',
-            'code' => 'required',
-            'password' => [
-                'required',
-                'string',
-                'min:8',
-                'confirmed',
-                'regex:/[a-z]/',
-                'regex:/[A-Z]/',
-                'regex:/[0-9]/',
-                'regex:/[@$!%*#?&]/'
-            ]
-        ]);
+{
+    $request->validate([
+        'email' => 'required|email|exists:users,email',
+        'password' => [
+            'required',
+            'string',
+            'min:8',
+            'confirmed',
+            'regex:/[a-z]/',
+            'regex:/[A-Z]/',
+            'regex:/[0-9]/',
+            'regex:/[@$!%*#?&]/'
+        ]
+    ]);
 
-        $reset = PasswordResetCode::where('email', $request->email)
-            ->where('code', $request->code)
-            ->where('expires_at', '>', now())
-            ->first();
+    $user = User::where('email', $request->email)->firstOrFail();
 
-        if (!$reset) {
-            return response()->json([
-                'message' => 'Invalid or expired code'
-            ], 400);
-        }
+    $user->password = Hash::make($request->password);
+    $user->save();
 
-        $user = User::where('email', $request->email)->firstOrFail();
-
-        $user->password = Hash::make($request->password);
-        $user->save();
-
-        $reset->delete();
-
-        return response()->json([
-            'message' => 'Password reset successfully'
-        ]);
-    }
+    return response()->json([
+        'message' => 'Password reset successfully'
+    ]);
+}
 }
