@@ -31,11 +31,10 @@ class AnalyzeFoodPriorityJob implements ShouldQueue
 
         $ai = $aiService->analyze($food);
 
-        $food->update([
-            "ai_priority_level" => $ai["ai_priority_level"],
-            "ai_priority_score" => $ai["ai_priority_score"],
-            "ai_priority_reason" => $ai["ai_priority_reason"],
-            "ai_recommended_action" => $ai["ai_recommended_action"],
-        ]);
+       $food->ai_priority_level = $ai["ai_priority_level"];
+$food->ai_priority_score = $ai["ai_priority_score"];
+$food->ai_priority_reason = $ai["ai_priority_reason"];
+$food->ai_recommended_action = $ai["ai_recommended_action"];
+$food->save();
     }
 }
